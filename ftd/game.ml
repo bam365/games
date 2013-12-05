@@ -1,6 +1,8 @@
+open Core.Std
+
 type ftd_state = FirstGuess | SecondGuess | DealerChoice | Finished
 type first_guess_result  = GuessTooHigh | GuessTooLow | Correct | NotAllowed
-type second_guess_result = Missed of int | Correct | NotAllowed
+type second_guess_result = Missed of Card.face * int | Correct | NotAllowed
 
 type t = 
     { players: string list;
@@ -82,10 +84,23 @@ let cycle_dealer game =
     }
     |> cycle_player_if_dealer
 
-let dealer_yield game =
+
+let dealer_yield game will_yield =
     match (current_state game) with
     | FirstGuess | SecondGuess | Finished -> false, game
-    | DealerChoice -> true, (cycle_dealer game)
+    | DealerChoice -> 
+        if will_yield then true, (cycle_dealer game) 
+        else true, {game with state = FirstGuess}
+
+
+let face_counts game = 
+        List.map ~f:(fun cf -> (cf, Board.face_count game.board cf)) Card.all_faces
+
+
+let current_card_face game =
+        match game.card with
+        | Some card -> Card.face card
+        | None -> Card.Ace
 
 
 let diff_game_card_with_face game card_face =
@@ -98,8 +113,8 @@ let first_guess game card_face =
     match (current_state game) with
     | DealerChoice | FirstGuess ->
         let diff = diff_game_card_with_face game card_face in
-        if diff < 0 then GuessTooLow, game
-        else if diff > 0 then GuessTooHigh, game
+        if diff < 0 then GuessTooLow, {game with state = SecondGuess}
+        else if diff > 0 then GuessTooHigh, {game with state = SecondGuess}
         else Correct, (cycle_turn game true)
     | SecondGuess | Finished -> (NotAllowed : first_guess_result), game
 
@@ -109,6 +124,6 @@ let second_guess game card_face =
     | SecondGuess ->
         let diff = diff_game_card_with_face game card_face in
         if diff = 0 then Correct, (cycle_turn game true)
-        else Missed (abs diff), (cycle_turn game false)
+        else Missed (current_card_face game, abs diff), (cycle_turn game false)
     | FirstGuess | DealerChoice | Finished -> (NotAllowed : second_guess_result), game
 
